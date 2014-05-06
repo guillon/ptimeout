@@ -2,31 +2,29 @@
 #
 # Copyright (c) STMicroelectronics 2012
 #
-# This file is part of ATOS.
+# This file is part of ptimeout.
 #
-# ATOS is free software: you can redistribute it and/or modify
+# ptimeout is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License v2.0
 # as published by the Free Software Foundation
 #
-# ATOS is distributed in the hope that it will be useful,
+# ptimeout is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# v2.0 along with ATOS. If not, see <http://www.gnu.org/licenses/>.
+# v2.0 along with ptimeout. If not, see <http://www.gnu.org/licenses/>.
 #
 #
-# Usage: get usage with atos-timeout -h
+# Usage: get usage with ptimeout -h
 #
 
 import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(
-            os.path.dirname(__file__), '..', 'lib', 'atos', 'python')))
-from atoslib import globals
 import subprocess, signal, errno, argparse, time
 
-GRP_ENVVAR = "ATOS_TIMEOUT_GRP"
+VERSION="1.0.0"
+GRP_ENVVAR = "PTIMEOUT_GRP"
 
 class ExitCodes:
     """ Exit codes used to feedback the parent process.
@@ -47,6 +45,45 @@ class LocalArgumentParser(argparse.ArgumentParser):
         super(LocalArgumentParser, self).__init__(
             prog=prog, description=description)
 
+    def parse_args(self):
+        args = super(LocalArgumentParser, self).parse_args()
+        return self.process_args(args)
+        
+
+    def get_signum(self, sigstr):
+        """
+        Return a signal number from a number or a symbolic string.
+        """
+        try:
+            signum = int(sigstr)
+        except:
+            try:
+                signum = eval("signal.SIG" + sigstr)
+            except:
+                self.exit(1, ("%s: error: invalid signal spec: %s\n"
+                              % (self.prog, sigstr)))
+        return signum
+
+    def process_args(self, args):
+        """
+        Process parsed args into suitable form after some checks.
+        """
+        args.signal = self.get_signum(args.signal)
+        args.catch_signals = set(
+            map(self.get_signum, args.catch_signals.split(",")))
+
+        if not args.format in ["pid", "short", "long"]:
+            self.exit(1, "%s: error: unknown list format: %s\n" %
+                      (self.prog, args.format))
+        if args.list != None:
+            return args
+            
+        if args.duration == None:
+            self.exit(1, "%s: error: missing duration argument\n" % self.prog)
+        if args.command == None:
+            self.exit(1, "%s: error: missing command\n" % self.prog)
+        return args
+
     def exit(self, status=0, message=None):  # pragma: uncovered
         """ Always exit with status CANCELED on error. """
         if status != 0:
@@ -55,30 +92,39 @@ class LocalArgumentParser(argparse.ArgumentParser):
 
 
 parser = LocalArgumentParser(
-    prog="atos-timeout",
-    description="ATOS timeout utility"
+    prog="ptimeout",
+    description="ptimeout utility"
     ", stops the given COMMAND after DURATION seconds.")
 
 parser.add_argument("-v", "--version",
                     help="output version string",
                     action="version",
-                    version="atos-timeout version " + globals.VERSION)
+                    version="ptimeout version " + VERSION)
 parser.add_argument("-d", "--debug",
                      dest="debug",
                      help="debug mode",
                      action="store_true")
 parser.add_argument("-s", "--signal",
-                     type=int, default=15,
-                     help="signal to be sent for terminating the COMMAND")
+                     default="TERM",
+                     help="signal to be sent for terminating the COMMAND. Default: TERM")
 parser.add_argument("-k", "--kill-after",
                      type=int, default=10,
-                     help="signal to be sent for terminating the COMMAND")
+                     help="delay for actually killing (SIGKILL) the COMMAND. Default: 10")
+parser.add_argument("-c", "--catch-signals",
+                     default="INT,TERM,QUIT",
+                     help="signals caught by timeout and propagated. Default INT,TERM,QUIT")
+parser.add_argument("-l", "--list",
+                     type=int,
+                     help="list the processes in the given timeout session pid")
+parser.add_argument("-f", "--format",
+                     default="short",
+                     help="format of the process list, one of: pid, short, long. Default: short")
 parser.add_argument("duration",
-                    nargs=1,
-                    type=int,
+                    nargs='?',
+                    type=int, default=0,
                     help="duration in seconds before the timeout")
 parser.add_argument("command",
-                    nargs=1,
+                    nargs='?', default=None,
                     help="command to be executed")
 parser.add_argument("arguments",
                     nargs=argparse.REMAINDER,
@@ -95,6 +141,11 @@ class Monitor():
     class TimeoutException(Exception):
         """ Timeout exception used by the alarm to notify the monitor. """
         pass
+
+    class TerminateException(Exception):
+        """ Terminate exception raised by trmination signals. """
+        def __init__(self, signum):
+            self.signum = signum
 
     def timeout_grps(self, pid):
         """
@@ -115,38 +166,33 @@ class Monitor():
                 return map(int, env[(len(GRP_ENVVAR) + 1):].split(':'))
         return []
 
-    def process_list(self, sid):
+    def all_process_list(self):
         """
-        Returns the list of processes in the given session id.
+        Returns all visible processes pids.
         """
-        def filter_ps_pid(pid):
-            return pid != ps_pid
+        def filter_is_pid(pidstr):
+            try:
+                pid = int(pidstr)
+                return True
+            except:
+                return False
 
-        try:
-            proc = subprocess.Popen(["ps", "-s", str(sid),
-                                     "-o", "pid"],
-                                    stdout=subprocess.PIPE)
-        except OSError:
-            return []
-        output = proc.communicate()[0]
-        if proc.returncode != 0:  # pragma: uncovered
-            return []
-        ps_pid = proc.pid
-        return filter(filter_ps_pid,
-                      map(int, [x.strip() for x in
-                                output.strip().split("\n")[1:]]))
+        for root, dirs, files in os.walk("/proc"):
+            pids = map(int, filter(filter_is_pid, dirs))
+            break
+        return pids
 
     def sub_processes(self):
         """
-        Construct the full list of process in the monitor hierarchy.
+        Construct the full list of process for this monitor.
         """
         def all_grp_processes(grp, process_list):
-            """ Get all processes that match the given group. """
+            """ Get all processes that match the monitor group. """
             def filter_grp(pid):
                 return grp in self.timeout_grps(pid)
             return filter(filter_grp, process_list)
 
-        processes = self.process_list(os.getsid(self.group))
+        processes = self.all_process_list()
         grp_processes = all_grp_processes(self.group, processes)
         return grp_processes
 
@@ -156,10 +202,15 @@ class Monitor():
         raise Monitor.TimeoutException()
 
     @staticmethod
+    def terminate_handler(signum, frame):
+        """ Handler for termination through signals. """
+        raise Monitor.TerminateException(signum)
+
+    @staticmethod
     def interrupt_handler(signum, frame):  # pragma: uncovered
         """ Handler for signals that require immediate exit. """
         print >>sys.stderr, \
-            "atos-timeout: interrupted by signal %d" % signum
+            "ptimeout: interrupted by signal %d" % signum
         sys.exit(128 + signum)
 
     def send_signal(self, sig):
@@ -179,22 +230,44 @@ class Monitor():
         while True:
             to_be_killed = filter(filter_monitor, self.sub_processes())
             if not to_be_killed: break
+            if self.args.debug:
+                print >>sys.stderr, "ptimeout: sending processes signal %d:" % sig
+                self.print_pids(to_be_killed, fmt="short", output=sys.stderr)
             for proc in to_be_killed:
                 try:
                     os.kill(proc, sig)
-                    if self.args.debug:
-                        print >>sys.stderr, "atos-timeout: killed " + \
-                            str(proc)
                 except OSError, e:
                     # Process already killed
                     pass
             time.sleep(1)
 
+    def print_pids(self, pids, fmt="short", output=sys.stdout):
+        assert(fmt in ["pid", "short", "long"])
+        for pid in pids:
+            try:
+                with open("/proc/%d/cmdline" % pid) as f:
+                    cmd_args = f.read().strip().split('\0')
+            except IOError:
+                # Can't read, not accessible
+                continue
+            if fmt == "pid":
+                print >>output, "%d" % (pid)
+            if fmt == "short":
+                print >>output, "%d %s" % (pid, cmd_args[0])
+            elif fmt == "long":
+                print >>output, "%d %s" % (pid, " ".join(cmd_args))
+            
     def run(self):
         """
         Runs the monitor and monitored process.
         This method returns the exit code to be passed to sys.exit.
         """
+
+        # Show processes for the given group
+        if args.list != None:
+            self.group = args.list
+            self.print_pids(self.sub_processes(), args.format)
+            sys.exit(0)
 
         # Set the timeout group to the monitor pid
         self.group = os.getpid()
@@ -202,13 +275,21 @@ class Monitor():
         os.environ[GRP_ENVVAR] = (str(self.group) if not grps else
                                   ':'.join((str(self.group), grps)))
 
+        # Install default handler for ^C
+        if signal.SIGINT not in self.args.catch_signals:
+            signal.signal(signal.SIGINT, self.interrupt_handler)
+
+        # Install termination handler for all requested signals
+        for signum in self.args.catch_signals:
+            signal.signal(signum, self.terminate_handler)
+            
         # Launch monitored process
+        command_args = [self.args.command] + self.args.arguments
         try:
-            self.proc = subprocess.Popen(
-                self.args.command + self.args.arguments)
+            self.proc = subprocess.Popen(command_args)
         except OSError, e:
-            print >>sys.stderr, "atos-timeout: error: failed to run " \
-                "command: " + self.args.command[0] + ": " + e.strerror
+            print >>sys.stderr, "ptimeout: error: failed to run " \
+                "command: %s : %s" % (e.strerror, " ".join(command_args))
             if e.errno == errno.ENOENT:
                 return ExitCodes.ENOENT
             else:
@@ -216,15 +297,13 @@ class Monitor():
 
         # Install timer through alarm
         signal.signal(signal.SIGALRM, self.timeout_handler)
-        signal.alarm(self.args.duration[0])
-
-        # Install handler for ^C
-        signal.signal(signal.SIGINT, self.interrupt_handler)
+        signal.alarm(self.args.duration)
 
         # Monitoring loop
         completed = False
         terminated = False
         killed = False
+        interrupted_by = None
         while not completed:
             try:
                 if killed:
@@ -232,27 +311,55 @@ class Monitor():
                 elif terminated:
                     signal.alarm(self.args.kill_after)
                     self.send_signal(self.args.signal)
+                elif interrupted_by != None:
+                    signal.alarm(self.args.kill_after)
+                    self.send_signal(interrupted_by)
                 code = self.proc.wait()
                 completed = True
             except self.TimeoutException:
-                if self.args.debug and not terminated: print >>sys.stderr, \
-                        "atos-timeout: command timeout: ", self.args.command[0]
-                if self.args.signal == 9 or terminated:
-                    if self.args.debug:
-                        print >>sys.stderr, "atos-timeout: sending SIGKILL"
-                    killed = True
+                if interrupted_by == None:
+                    if self.args.debug and not terminated:
+                        print >>sys.stderr, \
+                            "ptimeout: command timeout: %s" % command_args[0]
+                    if self.args.signal == 9 or terminated:
+                        if self.args.debug:
+                            print >>sys.stderr, \
+                                "ptimeout: sending SIGKILL: %s" % command_args[0]
+                        
+                        killed = True
+                    else:
+                        if self.args.debug:
+                            print >>sys.stderr, "ptimeout: " \
+                                "sending signal " + str(self.args.signal)
+                        terminated = True
                 else:
-                    if self.args.debug: print >>sys.stderr, "atos-timeout: " \
-                            "sending signal " + str(self.args.signal)
-                    terminated = True
-        if killed:
-            print >>sys.stderr, "Killed after timeout: " + \
-                " ".join(self.args.command + self.args.arguments)
-            return ExitCodes.TIMEDOUT
-        elif terminated:
-            print >>sys.stderr, "Terminated after timeout: " + \
-                " ".join(self.args.command + self.args.arguments)
-            return ExitCodes.TIMEDOUT
+                    if self.args.debug:
+                        print >>sys.stderr, \
+                            "ptimeout: sending SIGKILL: %s" % command_args[0]
+                        
+                    killed = True
+            except self.TerminateException, e:
+                if self.args.debug:
+                    print >>sys.stderr, \
+                        "ptimeout: interrupted by signal: %d " % e.signum
+                interrupted_by = e.signum
+        if interrupted_by == None:
+            if killed:
+                print >>sys.stderr, "Killed after timeout: %d: %s" % \
+                    (os.getpid(), " ".join(command_args))
+                return ExitCodes.TIMEDOUT
+            elif terminated:
+                print >>sys.stderr, "Terminated after timeout: %d: %s" % \
+                    (os.getpid(), " ".join(command_args))
+                return ExitCodes.TIMEDOUT
+        else:
+            if killed:
+                print >>sys.stderr, "Killed by signal %d: %d: %s" % \
+                    (interrupted_by, os.getpid(), " ".join(command_args))
+            else:
+                print >>sys.stderr, "Terminated by signal %d: %d: %s" % \
+                    (interrupted_by, os.getpid(), " ".join(command_args))
+            return 128 + interrupted_by
         return code
 
 args = parser.parse_args()
