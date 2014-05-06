@@ -1,0 +1,20 @@
+
+The ptimeout utility is a python script implementing an interface similar to
+GNU timeout with the additional ability to terminate all processes launched
+from the timeout session.
+
+This script requires python 2.6.x.
+
+The script can be used directly without installation.
+
+A makefile is provided anyway for completion and testing purpose.
+
+Build with:
+  $ make all # a no-op actually
+
+Run unittests with:
+  $ make check
+
+Install with, for instance:
+  $ make install PREFIX=$HOME/local  # Default is PREFIX=/usr/local
+
