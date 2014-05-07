@@ -18,11 +18,8 @@
       <div class="inner">
 
         <header>
-          <h1>ptimeout <div class="g-plusone" data-annotation="inline" data-width="300"></div></h1>
-          <h2>A timeout command with process garbage collection
-            <a href="https://buildhive.cloudbees.com/job/guillon/job/ptimeout">
-	      <img src="https://buildhive.cloudbees.com/job/guillon/job/ptimeout/badge/icon"
-		   alt="Build status" width=120/></a></h2>
+          <h1>ptimeout</h1>
+          <h2>A timeout command with process garbage collection</h2>
         </header>
 
         <section id="downloads" class="clearfix">
@@ -34,9 +31,63 @@
         <hr>
 
         <section id="main_content">
-          <p>The ptimeout utility is a python script implementing an interface similar to
+          <h1>
+<a name="synopsys" class="anchor" href="#synopsys"><span class="octicon octicon-link"></span></a>Synopsys</h1>
+
+<p>The ptimeout utility is a python script implementing an interface similar to
 GNU timeout with the additional ability to terminate all processes launched
 from the timeout session.</p>
+
+<p>In order to terminate all processes launched as part of the timeout
+session, an environment variable is propagated along with processes creation.</p>
+
+<p>This heuristic enables terminations of detached processes even when
+they are not anymore in the process parent-child tree.</p>
+
+<p>This also avoids the usage of process groups or process session leadership
+which have some undesirable effect observed with timeout tools provided
+with standard distributions. This approach is thus more transparent w.r.t.
+to overall process management.</p>
+
+<p>The limitation to this approach is when some process reset its environment,
+in which case it will not be tracked anymore (nor any of its child) by
+the termination heuristic. In this case the sub-process tree may not
+terminate as part of the timeout session.</p>
+
+<h1>
+<a name="examples" class="anchor" href="#examples"><span class="octicon octicon-link"></span></a>Examples</h1>
+
+<p>A typical usage of such a tool if for limiting the time of a batch job
+which may fall into non terminating condition such as in validation
+scripts or test processes.</p>
+
+<p>Also one generally expect the whole set of executed processes as part of
+the job lifetime to be teminated when the job terminates, hence the
+termination heuristic.</p>
+
+<p>Example of usage for limiting a batch script to 1 hour duration:</p>
+
+<pre><code>$ ptimeout 3600 script.sh
+</code></pre>
+
+<p>By default script.sh and all process executed from its process tree will
+be terminated with SIGTERM after 3600 seconds, or killed by SIGKILL 10
+seconds after if still persistent.</p>
+
+<p>The usage of ptimeout can be recursive and there is not side effect with
+respect to interactive/sessions/tty modes.</p>
+
+<p>Get the command line help with:</p>
+
+<pre><code>$ ptimeout --help
+usage: ptimeout [-h] [-v] [-d] [-s SIGNAL] [-k KILL_AFTER] [-c CATCH_SIGNALS]
+            [-l LIST] [-f FORMAT]
+            [duration] [command] ...
+....
+</code></pre>
+
+<h1>
+<a name="build-and-install" class="anchor" href="#build-and-install"><span class="octicon octicon-link"></span></a>Build and Install</h1>
 
 <p>This script requires python 2.6.x.</p>
 
@@ -46,15 +97,36 @@ from the timeout session.</p>
 
 <p>Build with:</p>
 
-<p>$ make all # a no-op actually</p>
+<pre><code>$ make all # a no-op actually
+</code></pre>
 
 <p>Run unittests with:</p>
 
-<p>$ make check</p>
+<pre><code>$ make check
+</code></pre>
 
 <p>Install with, for instance:</p>
 
-<p>$ make install PREFIX=$HOME/local  # Default is PREFIX=/usr/local</p>
+<pre><code>$ make install PREFIX=$HOME/local  # Default is PREFIX=/usr/local
+</code></pre>
+
+<h1>
+<a name="references" class="anchor" href="#references"><span class="octicon octicon-link"></span></a>References</h1>
+
+<p>Refer to the project home page at:
+<a href="http://guillon.github.com/ptimeout">http://guillon.github.com/ptimeout</a></p>
+
+<p>Refer to the current build and validation status at:
+<a href="https://buildhive.cloudbees.com/job/guillon/job/ptimeout">https://buildhive.cloudbees.com/job/guillon/job/ptimeout</a></p>
+
+<p>Fill issues and enhancement request at:
+<a href="https://github.com/guillon/ptimeout/issues">https://github.com/guillon/ptimeout/issues</a></p>
+
+<h1>
+<a name="license" class="anchor" href="#license"><span class="octicon octicon-link"></span></a>License</h1>
+
+<p>Refer to the COPYING file: <a href="https://github.com/guillon/ptimeout/blob/master/COPYING">https://github.com/guillon/ptimeout/blob/master/COPYING</a>
+Refer to the COPYRIGHT file: <a href="https://github.com/guillon/ptimeout/blob/master/COPYRIGHT">https://github.com/guillon/ptimeout/blob/master/COPYRIGHT</a></p>
         </section>
 
         <footer>
@@ -63,15 +135,6 @@ from the timeout session.</p>
         </footer>
 
         
-<!-- Place this tag after the last +1 button tag. -->
-<script type="text/javascript">
-  (function() {
-    var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
-    po.src = 'https://apis.google.com/js/plusone.js';
-    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
-  })();
-</script>
-
       </div>
     </div>
   </body>
