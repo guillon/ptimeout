@@ -20,10 +20,25 @@
 # Usage: get usage with ptimeout -h
 #
 
-import sys, os
-import subprocess, signal, errno, argparse, time
+import sys
 
-VERSION="1.0.0"
+# Fail early if python version is not supported
+def check_python_version():
+    try:
+        assert sys.hexversion >= 0x02060000
+        assert sys.hexversion < 0x03000000
+    except:  # pragma: fatal
+        print >>sys.stderr, \
+            'ptimeout: error: python version >= 2.6 is required'
+        sys.exit(1)
+check_python_version()
+
+import os, subprocess, signal, errno, argparse, time, hashlib
+
+# Update VERSION for major.minor.patch releases.
+# The sha1sum will be appended to the version string.
+VERSION="1.1.0"
+
 GRP_ENVVAR = "PTIMEOUT_GRP"
 
 class ExitCodes:
@@ -44,6 +59,13 @@ class LocalArgumentParser(argparse.ArgumentParser):
     def __init__(self, prog=None, description=None):
         super(LocalArgumentParser, self).__init__(
             prog=prog, description=description)
+
+    class VersionAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            with open(__file__) as f:
+                sha1 = hashlib.sha1(f.read()).hexdigest()
+            print "%s version %s [sha1:%s]" % (parser.prog, VERSION, sha1)
+            sys.exit(0)
 
     def parse_args(self):
         args = super(LocalArgumentParser, self).parse_args()
@@ -98,8 +120,8 @@ parser = LocalArgumentParser(
 
 parser.add_argument("-v", "--version",
                     help="output version string",
-                    action="version",
-                    version="ptimeout version " + VERSION)
+                    nargs=0,
+                    action=parser.VersionAction)
 parser.add_argument("-d", "--debug",
                      dest="debug",
                      help="debug mode",
@@ -236,7 +258,7 @@ class Monitor():
             for proc in to_be_killed:
                 try:
                     os.kill(proc, sig)
-                except OSError, e:
+                except OSError:
                     # Process already killed
                     pass
             time.sleep(1)
