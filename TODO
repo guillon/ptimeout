@@ -1,4 +1,5 @@
 TODO list for ptimrout:
+- make compatible with python 2.6+ (remove 2.7.x requirement)
 - terminate processes in the timeout group on normal exit
   When exiting on timout or on a terminating signal all
   processes are terminated.
@@ -11,8 +12,7 @@ TODO list for ptimrout:
   normal exit as the user basically uses ptimeout to confine
   the execution of all processes into the lifetime of
   ptimeout itself.
+- make compatible with python 2.4+ (remove 2.6.x requirement)
 - add coverage regression checks in unit tests
 - complete coverage with tests
-- add tests for correct termination of detached processes
 - add pylint or pep8 checks in make check
-- make compatible with python 2.4+ (remove 2.6.x requirement)

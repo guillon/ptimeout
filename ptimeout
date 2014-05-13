@@ -33,11 +33,11 @@ def check_python_version():
         sys.exit(1)
 check_python_version()
 
-import os, subprocess, signal, errno, argparse, time, hashlib
+import os, subprocess, signal, errno, argparse, time, hashlib, logging
 
 # Update VERSION for major.minor.patch releases.
 # The sha1sum will be appended to the version string.
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 GRP_ENVVAR = "PTIMEOUT_GRP"
 
@@ -123,24 +123,26 @@ parser.add_argument("-v", "--version",
                     nargs=0,
                     action=parser.VersionAction)
 parser.add_argument("-d", "--debug",
-                     dest="debug",
-                     help="debug mode",
-                     action="store_true")
+                    help="debug mode",
+                    action="store_true")
+parser.add_argument("--log-file",
+                    default="&stderr",
+                    help="log file, &stderr if not specified")
 parser.add_argument("-s", "--signal",
-                     default="TERM",
-                     help="signal to be sent for terminating the COMMAND. Default: TERM")
+                    default="TERM",
+                    help="signal to be sent for terminating the COMMAND. Default: TERM")
 parser.add_argument("-k", "--kill-after",
-                     type=int, default=10,
-                     help="delay for actually killing (SIGKILL) the COMMAND. Default: 10")
+                    type=int, default=10,
+                    help="delay for actually killing (SIGKILL) the COMMAND. Default: 10")
 parser.add_argument("-c", "--catch-signals",
-                     default="INT,TERM,QUIT",
-                     help="signals caught by timeout and propagated. Default INT,TERM,QUIT")
+                    default="INT,TERM,QUIT",
+                    help="signals caught by timeout and propagated. Default INT,TERM,QUIT")
 parser.add_argument("-l", "--list",
-                     type=int,
-                     help="list the processes in the given timeout session pid")
+                    type=int,
+                    help="list the processes in the given timeout session pid")
 parser.add_argument("-f", "--format",
-                     default="short",
-                     help="format of the process list, one of: pid, short, long. Default: short")
+                    default="short",
+                    help="format of the process list, one of: pid, short, long. Default: short")
 parser.add_argument("duration",
                     nargs='?',
                     type=int, default=0,
@@ -210,9 +212,9 @@ class Monitor():
         """
         def all_grp_processes(grp, process_list):
             """ Get all processes that match the monitor group. """
-            def filter_grp(pid):
+            def is_in_grp(pid):
                 return grp in self.timeout_grps(pid)
-            return filter(filter_grp, process_list)
+            return filter(is_in_grp, process_list)
 
         processes = self.all_process_list()
         grp_processes = all_grp_processes(self.group, processes)
@@ -245,17 +247,26 @@ class Monitor():
         Note that in the main monitor loop an alarm is setup in the
         case where the signal is not SIGKILL, thus in practice the
         loop will always be exited.
+        Unless the signal is SIGKILL, each process will be signaled
+        only once.
         """
-        def filter_monitor(proc):
-            return proc != self.group
+        def is_not_monitor(pid):
+            return pid != self.group
 
+        logger = logging.getLogger("ptimeout")
+        signaled = set()
         while True:
-            to_be_killed = filter(filter_monitor, self.sub_processes())
+            to_be_killed = set(filter(is_not_monitor, self.sub_processes()))
             if not to_be_killed: break
-            if self.args.debug:
-                print >>sys.stderr, "ptimeout: sending processes signal %d:" % sig
-                self.print_pids(to_be_killed, fmt="short", output=sys.stderr)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("processes alive:")
+                for pid in to_be_killed:
+                    logger.debug(self.format_pid(pid))
+            if sig != signal.SIGKILL:
+                to_be_killed = to_be_killed.difference(signaled)
             for proc in to_be_killed:
+                logger.debug("signal pid %d with %d" % (proc, sig))
+                signaled.add(proc)
                 try:
                     os.kill(proc, sig)
                 except OSError:
@@ -263,33 +274,64 @@ class Monitor():
                     pass
             time.sleep(1)
 
+    def format_pid(self, pid, fmt="short"):
+        """ Returns a formatted string for the given pid. """
+        assert(fmt in ["pid", "short", "long"])
+        try:
+            with open("/proc/%d/cmdline" % pid) as f:
+                cmd_args = f.read().strip().split('\0')
+        except IOError:
+            cmd_args = ["<died>"]
+        if fmt == "pid":
+            return "%d" % (pid)
+        if fmt == "short":
+            return "%d %s" % (pid, cmd_args[0])
+        elif fmt == "long":
+            return "%d %s" % (pid, " ".join(cmd_args))
+
     def print_pids(self, pids, fmt="short", output=sys.stdout):
+        """ Outputs the pids list informations. """
         assert(fmt in ["pid", "short", "long"])
         for pid in pids:
-            try:
-                with open("/proc/%d/cmdline" % pid) as f:
-                    cmd_args = f.read().strip().split('\0')
-            except IOError:
-                # Can't read, not accessible
-                continue
-            if fmt == "pid":
-                print >>output, "%d" % (pid)
-            if fmt == "short":
-                print >>output, "%d %s" % (pid, cmd_args[0])
-            elif fmt == "long":
-                print >>output, "%d %s" % (pid, " ".join(cmd_args))
-            
+            print >>output, self.format_pid(pid, fmt)
+
+    @staticmethod
+    def enum(*sequential, **named):
+        """ Generate enums. """
+        enums = dict(zip(sequential, range(len(sequential))), **named)
+        reverse = dict((value, key) for key, value in enums.iteritems())
+        enums['names'] = reverse
+        return type('Enum', (), enums)
+
     def run(self):
         """
         Runs the monitor and monitored process.
         This method returns the exit code to be passed to sys.exit.
         """
 
+        # Setup ptimeout logger
+        log_fmt = "%(levelname)s: %(name)s: %(process)d: %(message)s"
+        log_lvl = logging.DEBUG if args.debug else logging.INFO
+        if args.log_file == "&stderr":
+            log_stream = sys.stderr
+        elif args.log_file == "&stdout":
+            log_stream = sys.stdout
+        else:
+            try:
+                log_stream = open(args.log_file, "a", 1)
+            except IOError, e:
+                print >>sys.stderr, \
+                    "ptimeout: error:: can't open log file: %s" % str(e)
+                return ExitCodes.CANNOT_INVOKE
+        logging.basicConfig(stream = log_stream, level = log_lvl,
+                            format = log_fmt)
+        logger = logging.getLogger("ptimeout")
+
         # Show processes for the given group
         if args.list != None:
             self.group = args.list
             self.print_pids(self.sub_processes(), args.format)
-            sys.exit(0)
+            return 0
 
         # Set the timeout group to the monitor pid
         self.group = os.getpid()
@@ -322,66 +364,74 @@ class Monitor():
         signal.alarm(self.args.duration)
 
         # Monitoring loop
-        completed = False
-        terminated = False
-        killed = False
-        interrupted_by = None
-        while not completed:
+        S = self.enum('RUNNING', 'SIGNALING', 'KILLING', 'COMPLETING')
+        E = self.enum('NONE', 'TIMEOUT', 'SIGNAL', 'EXIT')
+        states = set()
+        events = set()
+        state = S.RUNNING
+        event = E.NONE
+        event_signum = None
+        while True:
             try:
-                if killed:
+                # Transitions
+                new_state = state
+                if state == S.RUNNING:
+                    if event == E.TIMEOUT or event == E.SIGNAL:
+                        if self.args.signal == signal.SIGKILL:
+                            new_state = S.KILLING
+                        else:
+                            new_state = S.SIGNALING
+                    elif event == E.EXIT:
+                        new_state = S.COMPLETING
+                elif state == S.SIGNALING:
+                    if event == E.TIMEOUT:
+                        new_state = S.KILLING
+                    elif event == E.EXIT:
+                        new_state = S.COMPLETING
+                elif state == S.KILLING:
+                    if event == E.EXIT:
+                        new_state = S.COMPLETING
+                elif state == S.COMPLETING:
+                    pass
+                logger.debug("transition: %s -- %s --> %s" %
+                             (S.names[state], E.names[event],
+                              S.names[new_state]))
+                # Actions
+                events.add(event)
+                states.add(new_state)
+                state = new_state
+                if state == S.KILLING:
                     self.send_signal(9)
-                elif terminated:
+                elif state == S.SIGNALING:
                     signal.alarm(self.args.kill_after)
                     self.send_signal(self.args.signal)
-                elif interrupted_by != None:
-                    signal.alarm(self.args.kill_after)
-                    self.send_signal(interrupted_by)
+                elif state == S.COMPLETING:
+                    break
+                # Normal execution, wait for children
                 code = self.proc.wait()
-                completed = True
+                event = E.EXIT
             except self.TimeoutException:
-                if interrupted_by == None:
-                    if self.args.debug and not terminated:
-                        print >>sys.stderr, \
-                            "ptimeout: command timeout: %s" % command_args[0]
-                    if self.args.signal == 9 or terminated:
-                        if self.args.debug:
-                            print >>sys.stderr, \
-                                "ptimeout: sending SIGKILL: %s" % command_args[0]
-                        
-                        killed = True
-                    else:
-                        if self.args.debug:
-                            print >>sys.stderr, "ptimeout: " \
-                                "sending signal " + str(self.args.signal)
-                        terminated = True
-                else:
-                    if self.args.debug:
-                        print >>sys.stderr, \
-                            "ptimeout: sending SIGKILL: %s" % command_args[0]
-                        
-                    killed = True
+                event = E.TIMEOUT
             except self.TerminateException, e:
-                if self.args.debug:
-                    print >>sys.stderr, \
-                        "ptimeout: interrupted by signal: %d " % e.signum
-                interrupted_by = e.signum
-        if interrupted_by == None:
-            if killed:
+                event = E.SIGNAL
+                event_signum = e.signum
+        if E.SIGNAL in events:
+            if S.KILLING in states:
+                print >>sys.stderr, "Killed after signal %d: %d: %s" % \
+                    (event_signum, os.getpid(), " ".join(command_args))
+            else:
+                print >>sys.stderr, "Terminated after signal %d: %d: %s" % \
+                    (event_signum, os.getpid(), " ".join(command_args))
+            return 128 + event_signum
+        elif E.TIMEOUT in events:
+            if S.KILLING in states:
                 print >>sys.stderr, "Killed after timeout: %d: %s" % \
                     (os.getpid(), " ".join(command_args))
                 return ExitCodes.TIMEDOUT
-            elif terminated:
+            else:
                 print >>sys.stderr, "Terminated after timeout: %d: %s" % \
                     (os.getpid(), " ".join(command_args))
                 return ExitCodes.TIMEDOUT
-        else:
-            if killed:
-                print >>sys.stderr, "Killed by signal %d: %d: %s" % \
-                    (interrupted_by, os.getpid(), " ".join(command_args))
-            else:
-                print >>sys.stderr, "Terminated by signal %d: %d: %s" % \
-                    (interrupted_by, os.getpid(), " ".join(command_args))
-            return 128 + interrupted_by
         return code
 
 args = parser.parse_args()

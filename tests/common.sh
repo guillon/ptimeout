@@ -18,6 +18,7 @@
 
 # common setup for unit tests
 
+set -e
 DIRNAME=$(dirname $0)
 TEST=$(basename $0)
 SRCDIR=${SRCDIR:-$(cd $DIRNAME/.. && pwd)}

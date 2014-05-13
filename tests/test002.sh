@@ -24,22 +24,22 @@ source `dirname $0`/common.sh
 TEST_CASE="ptimeout with invalid command"
 
 # Check error on file not found
-$PTIMEOUT 1 ./notfound | grep "error: failed to run command"
+$PTIMEOUT 1 ./notfound 2>&1 | grep "error: failed to run command"
 test ${PIPESTATUS[0]} = 127
 
 # Check error on file not executable
 touch notexec
-$PTIMEOUT 1 ./notexec | grep "error: failed to run command"
+$PTIMEOUT 1 ./notexec 2>&1 | grep "error: failed to run command"
 test ${PIPESTATUS[0]} = 126
 
 # Check error on missing interpreter (returns file not found)
 echo "#!$PWD/notfound" >intnotfound
 chmod 755 intnotfound
-$PTIMEOUT 1 ./intnotfound | grep "error: failed to run command"
+$PTIMEOUT 1 ./intnotfound 2>&1 | grep "error: failed to run command"
 test ${PIPESTATUS[0]} = 127
 
 # Check error on missing interpreter (returns file not found)
 echo "#!$PWD/notexec" >intnotexec
 chmod 755 intnotexec
-$PTIMEOUT 1 ./intnotexec | grep "error: failed to run command"
+$PTIMEOUT 1 ./intnotexec 2>&1 | grep "error: failed to run command"
 test ${PIPESTATUS[0]} = 126
