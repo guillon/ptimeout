@@ -21,6 +21,10 @@ in which case it will not be tracked anymore (nor any of its child) by
 the termination heuristic. In this case the sub-process tree may not
 terminate as part of the timeout session.
 
+# Download
+
+Download the last stable version of the script from there:
+https://raw.githubusercontent.com/guillon/ptimeout/master/ptimeout
 
 # Examples
 
