@@ -33,11 +33,11 @@ def check_python_version():
         sys.exit(1)
 check_python_version()
 
-import os, subprocess, signal, errno, argparse, time, hashlib, logging
+import os, subprocess, signal, errno, optparse, time, hashlib, logging
 
 # Update VERSION for major.minor.patch releases.
 # The sha1sum will be appended to the version string.
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 GRP_ENVVAR = "PTIMEOUT_GRP"
 
@@ -52,25 +52,31 @@ class ExitCodes:
     CANNOT_INVOKE = 126  # error executing job
     ENOENT = 127  # couldn't find job to exec
 
-class LocalArgumentParser(argparse.ArgumentParser):
+class LocalOptionParser(optparse.OptionParser):
     """
-    Overrides ArgumentParser for exiting with the correct code on error.
+    Overrides OptionParser.
+    Exits with the correct code on error.
+    Overrides version output.
     """
-    def __init__(self, prog=None, description=None):
-        super(LocalArgumentParser, self).__init__(
-            prog=prog, description=description)
-
-    class VersionAction(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
-            with open(__file__) as f:
-                sha1 = hashlib.sha1(f.read()).hexdigest()
-            print "%s version %s [sha1:%s]" % (parser.prog, VERSION, sha1)
-            sys.exit(0)
+    def __init__(self):
+        optparse.OptionParser.__init__(
+            self, prog="ptimeout",
+            description="ptimeout utility, "
+            "stops the given COMMAND after DURATION seconds.",
+            usage="%prog [options] DURATION COMMAND..."
+        )
 
     def parse_args(self):
-        args = super(LocalArgumentParser, self).parse_args()
-        return self.process_args(args)
+        opts, args = optparse.OptionParser.parse_args(self)
+        return self.process_args(opts, args)
         
+
+    @staticmethod
+    def handle_version(option, opt, value, parser):
+        with open(__file__) as f:
+            sha1 = hashlib.sha1(f.read()).hexdigest()
+        print "%s version %s [sha1:%s]" % (parser.prog, VERSION, sha1)
+        parser.exit(0)
 
     def get_signum(self, sigstr):
         """
@@ -78,81 +84,80 @@ class LocalArgumentParser(argparse.ArgumentParser):
         """
         try:
             signum = int(sigstr)
-        except:
+        except ValueError:
             try:
                 signum = eval("signal.SIG" + sigstr)
-            except:
+            except AttributeError:
                 self.exit(1, ("%s: error: invalid signal spec: %s\n"
                               % (self.prog, sigstr)))
         return signum
 
-    def process_args(self, args):
+    def process_args(self, opts, args):
         """
         Process parsed args into suitable form after some checks.
+        Return a single namespace with all arguments.
         """
-        args.signal = self.get_signum(args.signal)
-        args.catch_signals = set(
-            map(self.get_signum, args.catch_signals.split(",")))
+        opts.signal = self.get_signum(opts.signal)
+        if opts.catch_signals == "":
+            opts.catch_signals = []
+        else:
+            opts.catch_signals = set(
+                map(self.get_signum, opts.catch_signals.split(",")))
 
-        if not args.format in ["pid", "short", "long"]:
+        if not opts.format in ["pid", "short", "long"]:
             self.exit(1, "%s: error: unknown list format: %s\n" %
-                      (self.prog, args.format))
-        if args.list != None:
-            return args
-            
-        if args.duration == None:
+                      (self.prog, opts.format))
+        if opts.list != None:
+            return opts
+
+        if len(args) < 1:
             self.exit(1, "%s: error: missing duration argument\n" % self.prog)
-        if args.command == None:
+        try:
+            opts.duration = int(args[0])
+            assert(opts.duration >= 0)
+        except (ValueError, AssertionError):
+            self.exit(1, "%s: error: malformed duration argument: %s\n" %
+                      (self.prog, args[0]))
+        if len(args) < 2:
             self.exit(1, "%s: error: missing command\n" % self.prog)
-        return args
+        opts.command = args[1]
+        opts.arguments = args[2:]
+        return opts
 
     def exit(self, status=0, message=None):  # pragma: uncovered
         """ Always exit with status CANCELED on error. """
         if status != 0:
             status = ExitCodes.CANCELED
-        super(LocalArgumentParser, self).exit(status, message)
+        optparse.OptionParser.exit(self, status, message)
 
 
-parser = LocalArgumentParser(
-    prog="ptimeout",
-    description="ptimeout utility"
-    ", stops the given COMMAND after DURATION seconds.")
+parser = LocalOptionParser()
 
-parser.add_argument("-v", "--version",
-                    help="output version string",
-                    nargs=0,
-                    action=parser.VersionAction)
-parser.add_argument("-d", "--debug",
-                    help="debug mode",
-                    action="store_true")
-parser.add_argument("--log-file",
-                    default="&stderr",
-                    help="log file, &stderr if not specified")
-parser.add_argument("-s", "--signal",
-                    default="TERM",
-                    help="signal to be sent for terminating the COMMAND. Default: TERM")
-parser.add_argument("-k", "--kill-after",
-                    type=int, default=10,
-                    help="delay for actually killing (SIGKILL) the COMMAND. Default: 10")
-parser.add_argument("-c", "--catch-signals",
-                    default="INT,TERM,QUIT",
-                    help="signals caught by timeout and propagated. Default INT,TERM,QUIT")
-parser.add_argument("-l", "--list",
-                    type=int,
-                    help="list the processes in the given timeout session pid")
-parser.add_argument("-f", "--format",
-                    default="short",
-                    help="format of the process list, one of: pid, short, long. Default: short")
-parser.add_argument("duration",
-                    nargs='?',
-                    type=int, default=0,
-                    help="duration in seconds before the timeout")
-parser.add_argument("command",
-                    nargs='?', default=None,
-                    help="command to be executed")
-parser.add_argument("arguments",
-                    nargs=argparse.REMAINDER,
-                    help="command arguments")
+parser.add_option("-v", "--version",
+                  help="output version string",
+                  action="callback",
+                  callback=parser.handle_version)
+parser.add_option("-d", "--debug",
+                  help="debug mode",
+                  action="store_true")
+parser.add_option("--log-file",
+                  default="&stderr",
+                  help="log file, &stderr if not specified")
+parser.add_option("-s", "--signal",
+                  default="TERM",
+                  help="signal to be sent for terminating the COMMAND. Default: TERM")
+parser.add_option("-k", "--kill-after",
+                  type=int, default=10,
+                  help="delay for actually killing (SIGKILL) the COMMAND. Default: 10")
+parser.add_option("-c", "--catch-signals",
+                  default="INT,TERM,QUIT",
+                  help="signals caught by timeout and propagated. Default INT,TERM,QUIT")
+parser.add_option("-l", "--list",
+                  type=int,
+                  help="list the processes in the given timeout session pid")
+parser.add_option("-f", "--format",
+                  default="short",
+                  help="format of the process list, one of: pid, short, long. Default: short")
 
 class Monitor():
     """ Monitor class for interrupting a process after a given timeout. """

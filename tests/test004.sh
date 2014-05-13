@@ -23,8 +23,8 @@ source `dirname $0`/common.sh
 
 TEST_CASE="ptimeout help flags"
 
-$PTIMEOUT -h | head -1 | grep "^usage: ptimeout "
+$PTIMEOUT -h | head -1 | grep "^Usage: ptimeout "
 test ${PIPESTATUS[0]} = 0
 
-$PTIMEOUT --help | head -1 | grep "^usage: ptimeout "
+$PTIMEOUT --help | head -1 | grep "^Usage: ptimeout "
 test ${PIPESTATUS[0]} = 0
