@@ -21,7 +21,7 @@
 
 source `dirname $0`/common.sh
 
-TEST_CASE="ptimeout with detached processes"
+TEST_CASE="ptimeout exit with detached processes"
 
 cat >detaching.sh <<EOF
 #!/bin/sh
@@ -31,11 +31,9 @@ handler() {
   trap - TERM INT QUIT EXIT
 }
 trap handler TERM INT QUIT EXIT
-delay=\$1
-shift
 \$* &
 sleep 1
-sleep \$delay
+echo "Exititing $0"
 EOF
 chmod 755 detaching.sh
 
@@ -44,18 +42,21 @@ cat >signaling.sh <<EOF
 [ "\$DEBUG" = "" ] || set -x
 handler() {
   echo "\$\$: \$0: CODE: \$?" >signaling.out
-  trap - TERM INT QUIT EXIT
 }
 trap handler TERM INT QUIT EXIT
 delay=\$1
-sleep \$delay
+while true; do sleep \$delay; done
+echo "ERROR: Exititing $0 should not be reached"
+exit 1
 EOF
 chmod 755 signaling.sh
 
 rm -f detaching.out signaling.out
+
 r=0
-$PTIMEOUT ${DEBUG:+-d} 3 ./detaching.sh 10 ./signaling.sh 20 || r=$?
-test $r = 124
+$PTIMEOUT ${DEBUG:+-d} 3 ./detaching.sh ./signaling.sh 20 || r=$?
+# Normal exit, but unterruptible detached process is killed
+test $r = 0
 grep "./signaling.sh: CODE: 143" signaling.out >/dev/null
-grep "./detaching.sh: CODE: 143" detaching.out >/dev/null
+grep "./detaching.sh: CODE: 0" detaching.out >/dev/null
 

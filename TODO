@@ -1,16 +1,4 @@
 TODO list for ptimrout:
-- terminate processes in the timeout group on normal exit
-  When exiting on timout or on a terminating signal all
-  processes are terminated.
-  Though, when exiting normally (after completion of the monitored
-  command) the termination of all processes in the group is
-  not executed.
-  Hence detached processes launched are not terminated when
-  ptimeout terminates normally.
-  It seems logical to apply the same termination process on
-  normal exit as the user basically uses ptimeout to confine
-  the execution of all processes into the lifetime of
-  ptimeout itself.
 - make compatible with python 2.4+ (remove 2.6.x requirement)
 - add coverage regression checks in unit tests
 - complete coverage with tests

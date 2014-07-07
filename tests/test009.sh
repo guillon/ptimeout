@@ -21,7 +21,7 @@
 
 source `dirname $0`/common.sh
 
-TEST_CASE="ptimeout with detached processes"
+TEST_CASE="ptimeout receiving signal"
 
 cat >detaching.sh <<EOF
 #!/bin/sh
@@ -52,10 +52,14 @@ sleep \$delay
 EOF
 chmod 755 signaling.sh
 
+
 rm -f detaching.out signaling.out
+$PTIMEOUT ${DEBUG:+-d} 3 ./detaching.sh 10 ./signaling.sh 20 &
+sleep 1
 r=0
-$PTIMEOUT ${DEBUG:+-d} 3 ./detaching.sh 10 ./signaling.sh 20 || r=$?
-test $r = 124
+kill $!
+wait $! || r=$?
+test $r = 143
 grep "./signaling.sh: CODE: 143" signaling.out >/dev/null
 grep "./detaching.sh: CODE: 143" detaching.out >/dev/null
 

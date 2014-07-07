@@ -78,6 +78,16 @@ class LocalOptionParser(optparse.OptionParser):
         print "%s version %s [sha1:%s]" % (parser.prog, VERSION, sha1)
         parser.exit(0)
 
+    def get_signum_or_exit(self, sigstr):
+        """
+        Return a signal number from a number or a symbolic string.
+        Also handle the special case of 0 or EXIT which stand for
+        a standard exit (not a signal). In this case returns 0.
+        """
+        if sigstr == 0 or sigstr == "EXIT":
+            return 0
+        return self.get_signum(sigstr)
+
     def get_signum(self, sigstr):
         """
         Return a signal number from a number or a symbolic string.
@@ -102,7 +112,7 @@ class LocalOptionParser(optparse.OptionParser):
             opts.catch_signals = []
         else:
             opts.catch_signals = set(
-                map(self.get_signum, opts.catch_signals.split(",")))
+                map(self.get_signum_or_exit, opts.catch_signals.split(",")))
 
         if not opts.format in ["pid", "short", "long"]:
             self.exit(1, "%s: error: unknown list format: %s\n" %
@@ -150,8 +160,8 @@ parser.add_option("-k", "--kill-after",
                   type=int, default=10,
                   help="delay for actually killing (SIGKILL) the COMMAND. Default: 10")
 parser.add_option("-c", "--catch-signals",
-                  default="INT,TERM,QUIT",
-                  help="signals caught by timeout and propagated. Default INT,TERM,QUIT")
+                  default="INT,TERM,QUIT,EXIT",
+                  help="signals caught by timeout and propagated. Default: INT,TERM,QUIT,EXIT")
 parser.add_option("-l", "--list",
                   type=int,
                   help="list the processes in the given timeout session pid")
@@ -169,6 +179,10 @@ class Monitor():
 
     class TimeoutException(Exception):
         """ Timeout exception used by the alarm to notify the monitor. """
+        pass
+
+    class KillTimeoutException(Exception):
+        """ Timeout exception used by the alarm to notify kill to the monitor. """
         pass
 
     class TerminateException(Exception):
@@ -231,6 +245,11 @@ class Monitor():
         raise Monitor.TimeoutException()
 
     @staticmethod
+    def timeout_kill_handler(signum, frame):
+        """ Handler for the kill signal alarm. """
+        raise Monitor.KillTimeoutException()
+
+    @staticmethod
     def terminate_handler(signum, frame):
         """ Handler for termination through signals. """
         raise Monitor.TerminateException(signum)
@@ -261,23 +280,27 @@ class Monitor():
         logger = logging.getLogger("ptimeout")
         signaled = set()
         while True:
-            to_be_killed = set(filter(is_not_monitor, self.sub_processes()))
-            if not to_be_killed: break
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("processes alive:")
-                for pid in to_be_killed:
-                    logger.debug(self.format_pid(pid))
-            if sig != signal.SIGKILL:
-                to_be_killed = to_be_killed.difference(signaled)
-            for proc in to_be_killed:
-                logger.debug("signal pid %d with %d" % (proc, sig))
-                signaled.add(proc)
-                try:
-                    os.kill(proc, sig)
-                except OSError:
-                    # Process already killed
-                    pass
-            time.sleep(1)
+            try:
+                to_be_killed = set(filter(is_not_monitor, self.sub_processes()))
+                if not to_be_killed: break
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("processes alive:")
+                    for pid in to_be_killed:
+                        logger.debug(self.format_pid(pid))
+                if sig != signal.SIGKILL:
+                    to_be_killed = to_be_killed.difference(signaled)
+                for proc in to_be_killed:
+                    logger.debug("signal pid %d with %d" % (proc, sig))
+                    try:
+                        os.kill(proc, sig)
+                    except OSError:
+                        # Process already killed
+                        pass
+                    signaled.add(proc)
+                time.sleep(1)
+            except self.TerminateException, e:
+                logger.debug("ignoring signal %d" % e.signum)
+                pass
 
     def format_pid(self, pid, fmt="short"):
         """ Returns a formatted string for the given pid. """
@@ -350,7 +373,8 @@ class Monitor():
 
         # Install termination handler for all requested signals
         for signum in self.args.catch_signals:
-            signal.signal(signum, self.terminate_handler)
+            if signum != 0:
+                signal.signal(signum, self.terminate_handler)
             
         # Launch monitored process
         command_args = [self.args.command] + self.args.arguments
@@ -366,16 +390,21 @@ class Monitor():
 
         # Install timer through alarm
         signal.signal(signal.SIGALRM, self.timeout_handler)
-        signal.alarm(self.args.duration)
+        if self.args.duration > 0:
+            logger.debug("setting timeout alarm for %d secs" % self.args.duration)
+            signal.alarm(self.args.duration)
 
         # Monitoring loop
         S = self.enum('RUNNING', 'SIGNALING', 'KILLING', 'COMPLETING')
-        E = self.enum('NONE', 'TIMEOUT', 'SIGNAL', 'EXIT')
-        states = set()
-        events = set()
+        E = self.enum('NONE', 'TIMEOUT', 'KTIMEOUT', 'SIGNAL', 'EXIT')
         state = S.RUNNING
         event = E.NONE
         event_signum = None
+        collect_on_exit = 0 in self.args.catch_signals
+        first_signum = None
+        exit_code = None
+        states = set()
+        events = set()
         while True:
             try:
                 # Transitions
@@ -387,9 +416,12 @@ class Monitor():
                         else:
                             new_state = S.SIGNALING
                     elif event == E.EXIT:
-                        new_state = S.COMPLETING
+                        if collect_on_exit:
+                            new_state = S.SIGNALING
+                        else:
+                            new_state = S.COMPLETING
                 elif state == S.SIGNALING:
-                    if event == E.TIMEOUT:
+                    if event == E.KTIMEOUT:
                         new_state = S.KILLING
                     elif event == E.EXIT:
                         new_state = S.COMPLETING
@@ -402,32 +434,42 @@ class Monitor():
                              (S.names[state], E.names[event],
                               S.names[new_state]))
                 # Actions
-                events.add(event)
-                states.add(new_state)
                 state = new_state
+                states.add(state)
+                events.add(event)
+                event = E.NONE
                 if state == S.KILLING:
+                    logger.debug("killing all processes with sig %d" % 9)
                     self.send_signal(9)
                 elif state == S.SIGNALING:
+                    logger.debug("setting kill alarm for %d secs" % self.args.kill_after)
+                    signal.signal(signal.SIGALRM, self.timeout_kill_handler)
                     signal.alarm(self.args.kill_after)
+                    logger.debug("terminating all processes with sig %d" % self.args.signal)
                     self.send_signal(self.args.signal)
                 elif state == S.COMPLETING:
                     break
-                # Normal execution, wait for children
-                code = self.proc.wait()
+                # Wait for child unless already exited
+                if exit_code == None:
+                    exit_code = self.proc.wait()
+                    logger.debug("child exit with code: %d" % exit_code)
                 event = E.EXIT
             except self.TimeoutException:
                 event = E.TIMEOUT
+            except self.KillTimeoutException:
+                event = E.KTIMEOUT
             except self.TerminateException, e:
                 event = E.SIGNAL
                 event_signum = e.signum
+                if first_signum == None: first_signum = e.signum
         if E.SIGNAL in events:
             if S.KILLING in states:
                 print >>sys.stderr, "Killed after signal %d: %d: %s" % \
-                    (event_signum, os.getpid(), " ".join(command_args))
+                    (first_signum, os.getpid(), " ".join(command_args))
             else:
                 print >>sys.stderr, "Terminated after signal %d: %d: %s" % \
-                    (event_signum, os.getpid(), " ".join(command_args))
-            return 128 + event_signum
+                    (first_signum, os.getpid(), " ".join(command_args))
+            return 128 + first_signum
         elif E.TIMEOUT in events:
             if S.KILLING in states:
                 print >>sys.stderr, "Killed after timeout: %d: %s" % \
@@ -437,7 +479,7 @@ class Monitor():
                 print >>sys.stderr, "Terminated after timeout: %d: %s" % \
                     (os.getpid(), " ".join(command_args))
                 return ExitCodes.TIMEDOUT
-        return code
+        return exit_code
 
 args = parser.parse_args()
 sys.exit(Monitor(args).run())
