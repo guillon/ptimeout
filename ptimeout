@@ -190,6 +190,17 @@ class Monitor():
         def __init__(self, signum):
             self.signum = signum
 
+    @staticmethod
+    def filter_is_pid(pidstr):
+        """
+        Filter function for valid pid identifiers.
+        """
+        try:
+            pid = int(pidstr)
+            return pid >= 0
+        except:
+            return False
+
     def timeout_grps(self, pid):
         """
         Get the timeout groups for the given process, it is available through
@@ -206,22 +217,17 @@ class Monitor():
         for env in env_list:
             index = env.find(GRP_ENVVAR + "=")
             if index == 0:
-                return map(int, env[(len(GRP_ENVVAR) + 1):].split(':'))
+                return map(int,
+                           filter(self.filter_is_pid,
+                                  env[(len(GRP_ENVVAR) + 1):].split(':')))
         return []
 
     def all_process_list(self):
         """
         Returns all visible processes pids.
         """
-        def filter_is_pid(pidstr):
-            try:
-                pid = int(pidstr)
-                return True
-            except:
-                return False
-
         for root, dirs, files in os.walk("/proc"):
-            pids = map(int, filter(filter_is_pid, dirs))
+            pids = map(int, filter(self.filter_is_pid, dirs))
             break
         return pids
 
