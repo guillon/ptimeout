@@ -1,4 +1,6 @@
 
+[![Build Status](https://api.travis-ci.org/guillon/ptimeout.png?branch=master)](https://travis-ci.org/guillon/repo-mirror/branches)
+
 # Synopsys
 
 The ptimeout utility is a python script implementing an interface similar to
@@ -38,11 +40,18 @@ termination heuristic.
 
 Example of usage for limiting a batch script to 1 hour duration:
 
-    $ ptimeout 3600 script.sh
+    $ ptimeout 3600 -- script.sh
 
 By default script.sh and all process executed from its process tree will
 be terminated with SIGTERM after 3600 seconds, or killed by SIGKILL 10
 seconds after if still persistent.
+
+If one wants only process garbage collection, use a timeout of 0 as in:
+
+    $ ptimeout 0 -- script.sh
+
+In this case, the tool will not bound the execution time, but will still
+garbage collect all processes when receiving an interrupting signal.
 
 The usage of ptimeout can be recursive and there is not side effect with
 respect to interactive/sessions/tty modes.
@@ -83,7 +92,7 @@ Refer to the project home page at:
 http://guillon.github.com/ptimeout
 
 Refer to the current build and validation status at:
-https://buildhive.cloudbees.com/job/guillon/job/ptimeout
+https://travis-ci.org/guillon/ptimeout?branches
 
 Fill issues and enhancement request at:
 https://github.com/guillon/ptimeout/issues
