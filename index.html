@@ -1,41 +1,39 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
-    <meta charset='utf-8'>
+    <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
-    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
-    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
-    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+    <title>ptimeout by guillon</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <!--[if lt IE 9]>
     <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
-    <title>ptimeout by guillon</title>
   </head>
-
   <body>
-    <div id="container">
-      <div class="inner">
+    <div class="wrapper">
+      <header>
+        <h1 class="header">ptimeout</h1>
+        <p class="header">A timeout command with process garbage collection</p>
 
-        <header>
-          <h1>ptimeout <div class="g-plusone" data-annotation="inline" data-width="300"></div></h1>
-          <h2>A timeout command with process garbage collection
-            <a href="https://buildhive.cloudbees.com/job/guillon/job/ptimeout">
-	      <img src="https://buildhive.cloudbees.com/job/guillon/job/ptimeout/badge/icon"
-		   alt="Build status" width=120/></a></h2>
-        </header>
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/guillon/ptimeout/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/guillon/ptimeout/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/guillon/ptimeout">View On GitHub</a></li>
+        </ul>
 
-        <section id="downloads" class="clearfix">
-          <a href="https://github.com/guillon/ptimeout/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
-          <a href="https://github.com/guillon/ptimeout/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
-          <a href="https://github.com/guillon/ptimeout" id="view-on-github" class="button"><span>View on GitHub</span></a>
-        </section>
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/guillon">guillon</a></p>
 
-        <hr>
 
-        <section id="main_content">
-          <h1>
-<a name="synopsys" class="anchor" href="#synopsys"><span class="octicon octicon-link"></span></a>Synopsys</h1>
+      </header>
+      <section>
+        <p><a href="https://travis-ci.org/guillon/repo-mirror/branches"><img src="https://api.travis-ci.org/guillon/ptimeout.png?branch=master" alt="Build Status"></a></p>
+
+<h1>
+<a id="synopsys" class="anchor" href="#synopsys" aria-hidden="true"><span class="octicon octicon-link"></span></a>Synopsys</h1>
 
 <p>The ptimeout utility is a python script implementing an interface similar to
 GNU timeout with the additional ability to terminate all processes launched
@@ -58,13 +56,13 @@ the termination heuristic. In this case the sub-process tree may not
 terminate as part of the timeout session.</p>
 
 <h1>
-<a name="download" class="anchor" href="#download"><span class="octicon octicon-link"></span></a>Download</h1>
+<a id="download" class="anchor" href="#download" aria-hidden="true"><span class="octicon octicon-link"></span></a>Download</h1>
 
 <p>Download the last stable version of the script from there:
 <a href="https://raw.githubusercontent.com/guillon/ptimeout/master/ptimeout">https://raw.githubusercontent.com/guillon/ptimeout/master/ptimeout</a></p>
 
 <h1>
-<a name="examples" class="anchor" href="#examples"><span class="octicon octicon-link"></span></a>Examples</h1>
+<a id="examples" class="anchor" href="#examples" aria-hidden="true"><span class="octicon octicon-link"></span></a>Examples</h1>
 
 <p>A typical usage of such a tool if for limiting the time of a batch job
 which may fall into non terminating condition such as in validation
@@ -76,12 +74,20 @@ termination heuristic.</p>
 
 <p>Example of usage for limiting a batch script to 1 hour duration:</p>
 
-<pre><code>$ ptimeout 3600 script.sh
+<pre><code>$ ptimeout 3600 -- script.sh
 </code></pre>
 
 <p>By default script.sh and all process executed from its process tree will
 be terminated with SIGTERM after 3600 seconds, or killed by SIGKILL 10
 seconds after if still persistent.</p>
+
+<p>If one wants only process garbage collection, use a timeout of 0 as in:</p>
+
+<pre><code>$ ptimeout 0 -- script.sh
+</code></pre>
+
+<p>In this case, the tool will not bound the execution time, but will still
+garbage collect all processes when receiving an interrupting signal.</p>
 
 <p>The usage of ptimeout can be recursive and there is not side effect with
 respect to interactive/sessions/tty modes.</p>
@@ -96,7 +102,7 @@ usage: ptimeout [-h] [-v] [-d] [-s SIGNAL] [-k KILL_AFTER] [-c CATCH_SIGNALS]
 </code></pre>
 
 <h1>
-<a name="build-and-install" class="anchor" href="#build-and-install"><span class="octicon octicon-link"></span></a>Build and Install</h1>
+<a id="build-and-install" class="anchor" href="#build-and-install" aria-hidden="true"><span class="octicon octicon-link"></span></a>Build and Install</h1>
 
 <p>This script requires python 2.6.x.</p>
 
@@ -120,51 +126,38 @@ usage: ptimeout [-h] [-v] [-d] [-s SIGNAL] [-k KILL_AFTER] [-c CATCH_SIGNALS]
 </code></pre>
 
 <h1>
-<a name="references" class="anchor" href="#references"><span class="octicon octicon-link"></span></a>References</h1>
+<a id="references" class="anchor" href="#references" aria-hidden="true"><span class="octicon octicon-link"></span></a>References</h1>
 
 <p>Refer to the project home page at:
 <a href="http://guillon.github.com/ptimeout">http://guillon.github.com/ptimeout</a></p>
 
 <p>Refer to the current build and validation status at:
-<a href="https://buildhive.cloudbees.com/job/guillon/job/ptimeout">https://buildhive.cloudbees.com/job/guillon/job/ptimeout</a></p>
+<a href="https://travis-ci.org/guillon/ptimeout?branches">https://travis-ci.org/guillon/ptimeout?branches</a></p>
 
 <p>Fill issues and enhancement request at:
 <a href="https://github.com/guillon/ptimeout/issues">https://github.com/guillon/ptimeout/issues</a></p>
 
 <h1>
-<a name="license" class="anchor" href="#license"><span class="octicon octicon-link"></span></a>License</h1>
+<a id="license" class="anchor" href="#license" aria-hidden="true"><span class="octicon octicon-link"></span></a>License</h1>
 
 <p>Refer to the COPYING file: <a href="https://github.com/guillon/ptimeout/blob/master/COPYING">https://github.com/guillon/ptimeout/blob/master/COPYING</a>
 Refer to the COPYRIGHT file: <a href="https://github.com/guillon/ptimeout/blob/master/COPYRIGHT">https://github.com/guillon/ptimeout/blob/master/COPYRIGHT</a></p>
-        </section>
-
-        <footer>
-          ptimeout is maintained by <a href="https://github.com/guillon">guillon</a><br>
-          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.
-        </footer>
-
-        
-<!-- Place this tag after the last +1 button tag. -->
-<script type="text/javascript">
-  (function() {
-    var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
-    po.src = 'https://apis.google.com/js/plusone.js';
-    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
-  })();
-</script>
-
-  <!-- Google analytics script. -->
-<script type="text/javascript">
-  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
-
-  ga('create', 'UA-50872352-1', 'github.com');
-  ga('send', 'pageview');
-
-</script>
-      </div>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
     </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		          <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-50872352-1");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
   </body>
 </html>
