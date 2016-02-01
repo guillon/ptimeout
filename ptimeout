@@ -37,7 +37,7 @@ import os, subprocess, signal, errno, optparse, time, hashlib, logging
 
 # Update VERSION for major.minor.patch releases.
 # The sha1sum will be appended to the version string.
-VERSION="1.3.3"
+VERSION="1.3.4"
 
 GRP_ENVVAR = "PTIMEOUT_GRP"
 
