@@ -1,8 +1,19 @@
 sudo: false
 language: python
 python:
- - "2.6"
- - "2.7"
- - "3.3"
+  - '2.6'
+  - '2.7'
+  - '3.3'
 script:
- - make check
+  - make all
+  - make check
+  - make install PREFIX=install
+deploy:
+  provider: releases
+  api_key:
+    secure: CdbpvG4HAmd8aDVPJxNkJT5h3QVsbDB4F2l6oVUULAnI5dvdZYoEV/6FyCn6qy/ndI2B+kI20cqqqKJOVKkWfNBFFehqOTavNAhvMX02934ARPg0CXO7R6lU5KdUJLdHu90A2SJR6vP7ciKG/HnWU8AyXRYr/MbmNxArTBl4IvE=
+  file: install/bin/ptimeout
+  on:
+    repo: guillon/ptimeout
+    tags: true
+    python: '2.6'
