@@ -65,6 +65,7 @@ class LocalOptionParser(optparse.OptionParser):
             "stops the given COMMAND after DURATION seconds.",
             usage="%prog [options] DURATION COMMAND..."
         )
+        self.disable_interspersed_args()
 
     def parse_args(self):
         opts, args = optparse.OptionParser.parse_args(self)
