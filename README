@@ -1,5 +1,5 @@
 
-[![Build Status](https://api.travis-ci.org/guillon/ptimeout.png?branch=master)](https://travis-ci.org/guillon/repo-mirror/branches)
+[![Build Status](https://api.travis-ci.org/guillon/ptimeout.png?branch=master)](https://travis-ci.org/guillon/ptimeout/branches)
 
 # Synopsys
 
@@ -40,7 +40,7 @@ termination heuristic.
 
 Example of usage for limiting a batch script to 1 hour duration:
 
-    $ ptimeout 3600 -- script.sh
+    $ ptimeout 3600 script.sh
 
 By default script.sh and all process executed from its process tree will
 be terminated with SIGTERM after 3600 seconds, or killed by SIGKILL 10
@@ -48,7 +48,7 @@ seconds after if still persistent.
 
 If one wants only process garbage collection, use a timeout of 0 as in:
 
-    $ ptimeout 0 -- script.sh
+    $ ptimeout 0 script.sh
 
 In this case, the tool will not bound the execution time, but will still
 garbage collect all processes when receiving an interrupting signal.
@@ -99,6 +99,8 @@ https://github.com/guillon/ptimeout/issues
 
 
 # License
+
+The tool is distributed under the GPLv2 license.
 
 Refer to the COPYING file: https://github.com/guillon/ptimeout/blob/master/COPYING
 Refer to the COPYRIGHT file: https://github.com/guillon/ptimeout/blob/master/COPYRIGHT
