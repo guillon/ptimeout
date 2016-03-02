@@ -6,7 +6,7 @@ python:
   - '3.3'
 script:
   - make all
-  - make check
+  - make DEBUGTEST=1 check
   - make install PREFIX=install
 deploy:
   provider: releases

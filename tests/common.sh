@@ -72,5 +72,5 @@ rm -rf $TEST.dir
 [ "$KEEPTEST" = 0 -a "$KEEPFAIL" = 0 ] || TMPTEST=`mkdir -p $TEST.dir && echo $PWD/$TEST.dir`
 [ "$KEEPTEST" = 0 -a "$KEEPFAIL" = 0 ] || echo "Keeping test directory in: $TMPTEST"
 cd $TMPTEST
-[ "$DEBUG" = "" ] || export PS4='+ $0: ${FUNCNAME+$FUNCNAME :}$LINENO: '
-[ "$DEBUG" = "" ] || set -x
+[ "$DEBUGTEST" = "" ] || export PS4='+ $0: ${FUNCNAME+$FUNCNAME :}$LINENO: '
+[ "$DEBUGTEST" = "" ] || set -x
