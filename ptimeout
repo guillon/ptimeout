@@ -110,22 +110,29 @@ class LocalOptionParser(optparse.OptionParser):
         """
         opts.signal = self.get_signum(opts.signal)
         if opts.catch_signals == "":
-            opts.catch_signals = []
+            opts.catch_signals = set()
         else:
             opts.catch_signals = set(
                 map(self.get_signum_or_exit, opts.catch_signals.split(",")))
 
+        if opts.exit_signals == "":
+            opts.exit_signals = set()
+        else:
+            opts.exit_signals = set(
+                map(self.get_signum, opts.exit_signals.split(",")))
+
         if opts.ignore_signals == "":
-            opts.ignore_signals = []
+            opts.ignore_signals = set()
         else:
             opts.ignore_signals = set(
                 map(self.get_signum, opts.ignore_signals.split(",")))
 
-        if opts.exit_signals == "":
-            opts.exit_signals = []
-        else:
-            opts.exit_signals = set(
-                map(self.get_signum, opts.exit_signals.split(",")))
+        opts.catch_signals = (opts.catch_signals.
+                              difference(opts.exit_signals).
+                              difference(opts.ignore_signals))
+
+        opts.exit_signals = (opts.exit_signals.
+                             difference(opts.ignore_signals))
 
         if not opts.format in ["pid", "short", "long"]:
             self.exit(1, "%s: error: unknown list format: %s\n" %
@@ -265,36 +272,6 @@ class Monitor():
         grp_processes = all_grp_processes(self.group, processes)
         return grp_processes
 
-    @staticmethod
-    def timeout_handler(signum, frame):
-        """ Handler for the alarm. """
-        logger = logging.getLogger("ptimeout")
-        logger.debug("timeout_handler: got signal %d" % signum)
-        raise Monitor.TimeoutException()
-
-    @staticmethod
-    def timeout_kill_handler(signum, frame):
-        """ Handler for the kill signal alarm. """
-        logger = logging.getLogger("ptimeout")
-        logger.debug("timeout_kill_handler: got signal %d" % signum)
-        raise Monitor.KillTimeoutException()
-
-    @staticmethod
-    def terminate_handler(signum, frame):
-        """ Handler for termination through signals. """
-        logger = logging.getLogger("ptimeout")
-        logger.debug("terminate_handler: got signal %d" % signum)
-        raise Monitor.TerminateException(signum)
-
-    @staticmethod
-    def interrupt_handler(signum, frame):  # pragma: uncovered
-        """ Handler for signals that require immediate exit. """
-        logger = logging.getLogger("ptimeout")
-        logger.debug("interrupt_handler: got signal %d" % signum)
-        print("ptimeout: interrupted by signal %d" % signum,
-              file=sys.stderr)
-        sys.exit(128 + signum)
-
     def send_signal(self, sig):
         """
         Terminates the monitored processes with the given signal.
@@ -389,6 +366,37 @@ class Monitor():
                             format = log_fmt)
         logger = logging.getLogger("ptimeout")
 
+        def inhibit_signals():
+            """ Inhibit all signals from the catch_signals set. """
+            time.sleep(1)
+            for signum in self.args.catch_signals:
+                if signum != 0: signal.signal(signum, signal.SIG_IGN)
+
+        def timeout_handler(signum, frame):
+            """ Handler for the alarm. """
+            inhibit_signals()
+            logger.debug("timeout_handler: got signal %d" % signum)
+            raise Monitor.TimeoutException()
+
+        def timeout_kill_handler(signum, frame):
+            """ Handler for the kill signal alarm. """
+            inhibit_signals()
+            logger.debug("timeout_kill_handler: got signal %d" % signum)
+            raise Monitor.KillTimeoutException()
+
+        def terminate_handler(signum, frame):
+            """ Handler for termination through signals. """
+            inhibit_signals()
+            logger.debug("terminate_handler: got signal %d" % signum)
+            raise Monitor.TerminateException(signum)
+
+        def interrupt_handler(signum, frame):  # pragma: uncovered
+            """ Handler for signals that require immediate exit with message. """
+            logger.debug("interrupt_handler: got signal %d" % signum)
+            print("ptimeout: interrupted by signal %d" % signum,
+              file=sys.stderr)
+            sys.exit(128 + signum)
+
         # Show processes for the given group
         if args.list != None:
             self.group = args.list
@@ -403,16 +411,16 @@ class Monitor():
 
         # Install default handler for ^C
         if signal.SIGINT not in self.args.catch_signals:
-            signal.signal(signal.SIGINT, self.interrupt_handler)
+            signal.signal(signal.SIGINT, interrupt_handler)
 
         # Install termination handler for all requested signals
         for signum in self.args.catch_signals:
             if signum != 0:
-                signal.signal(signum, self.terminate_handler)
+                signal.signal(signum, terminate_handler)
 
         # Install interrupt handler for all immediate exit signals
         for signum in self.args.exit_signals:
-            signal.signal(signum, self.interrupt_handler)
+            signal.signal(signum, interrupt_handler)
 
         # Install null handler for all ignored signals
         for signum in self.args.ignore_signals:
@@ -432,7 +440,7 @@ class Monitor():
                 return ExitCodes.CANNOT_INVOKE
 
         # Install timer through alarm
-        signal.signal(signal.SIGALRM, self.timeout_handler)
+        signal.signal(signal.SIGALRM, timeout_handler)
         if self.args.duration > 0:
             logger.debug("setting timeout alarm for %d secs" % self.args.duration)
             signal.alarm(self.args.duration)
@@ -486,7 +494,7 @@ class Monitor():
                     self.send_signal(9)
                 elif state == S.SIGNALING:
                     logger.debug("setting kill alarm for %d secs" % self.args.kill_after)
-                    signal.signal(signal.SIGALRM, self.timeout_kill_handler)
+                    signal.signal(signal.SIGALRM, timeout_kill_handler)
                     signal.alarm(self.args.kill_after)
                     logger.debug("terminating all processes with sig %d" % self.args.signal)
                     self.send_signal(self.args.signal)
