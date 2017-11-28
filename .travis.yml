@@ -11,7 +11,7 @@ script:
 deploy:
   provider: releases
   api_key:
-    secure: CdbpvG4HAmd8aDVPJxNkJT5h3QVsbDB4F2l6oVUULAnI5dvdZYoEV/6FyCn6qy/ndI2B+kI20cqqqKJOVKkWfNBFFehqOTavNAhvMX02934ARPg0CXO7R6lU5KdUJLdHu90A2SJR6vP7ciKG/HnWU8AyXRYr/MbmNxArTBl4IvE=
+    secure: DEhHOQXSRpOx/u6a6QHeZjLrCawBG4M4TzP+Uk66cNQQT55M+JAOnV2VSEguNOzzCGoPheZYsojA+b6hGE15BsXtrLb0ZCK1SL4Y5ThcUEPONaJiZPLk4XRmV+pjfaCxyZC7mxAsAJ1dKdxXFr4ygm5D8h+3lv6etxhmo45fa5c=
   file: install/bin/ptimeout
   on:
     repo: guillon/ptimeout
