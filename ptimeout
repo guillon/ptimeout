@@ -187,7 +187,7 @@ class Monitor():
         pass
 
     class TerminateException(Exception):
-        """ Terminate exception raised by trmination signals. """
+        """ Terminate exception raised by termination signals. """
         def __init__(self, signum):
             self.signum = signum
 
@@ -227,6 +227,7 @@ class Monitor():
         """
         Returns all visible processes pids.
         """
+        pids = []
         for root, dirs, files in os.walk("/proc"):
             pids = map(int, filter(self.filter_is_pid, dirs))
             break
