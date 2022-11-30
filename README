@@ -77,13 +77,27 @@ Build with:
 
     $ make all # a no-op actually
 
-Run unittests with:
-
-    $ make check
-
 Install with, for instance:
 
     $ make install PREFIX=$HOME/local  # Default is PREFIX=/usr/local
+
+
+# Development
+
+Always augment and run tests before pushing commits for review:
+
+    make check
+
+In order to build python 2 and python 3 releases do:
+
+    make release
+
+Then, in order to publish newly released packages to PyPI for python2 and python3:
+
+    make release-upload
+
+Note that this is protected by an authentication on the PyPI site, only the
+author can push PyPI updates.
 
 
 # References
